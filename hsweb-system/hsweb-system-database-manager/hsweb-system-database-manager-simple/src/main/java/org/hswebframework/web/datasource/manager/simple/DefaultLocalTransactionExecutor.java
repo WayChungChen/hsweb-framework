@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -46,7 +47,7 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
 
     private TransactionTemplate transactionTemplate;
 
-    private boolean commit = false;
+    private volatile boolean commit = false;
 
     private volatile boolean running = false;
 
@@ -93,10 +94,20 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
         }
     }
 
+    public boolean isRunning() {
+        return running;
+    }
+
     @Override
     public void rollback() {
-        shutdown = true;
+        tryRollback();
         waitToClose();
+    }
+
+    private void tryRollback() {
+        running = false;
+        shutdown = true;
+        commit = false;
     }
 
     public void setSqlExecutor(SqlExecutor sqlExecutor) {
@@ -124,13 +135,17 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
             }
             while (!shutdown) {
                 logger.debug("wait sql execute request {}", transactionId);
-                waitToReady.await();//等待有新的sql进来
+                if (transactionTemplate.getTimeout() > 0) {
+                    waitToReady.await(transactionTemplate.getTimeout(), TimeUnit.MILLISECONDS);//等待有新的sql进来
+                } else {
+                    waitToReady.await();
+                }
                 waitToReady.reset();//重置,下一次循环继续等待
                 //执行sql
                 doExecute();
             }
         } catch (Exception e) {
-            rollback();//回滚
+            tryRollback();//回滚
             logger.error("execute sql error {}", transactionId, e);
         } finally {
             try {
@@ -167,16 +182,20 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
                                 }
                                 //执行sql
                                 return sqlRequestExecutor.apply(sqlExecutor, sqlInfo);
-                            } catch (SQLException e) {
-                                throw new SqlExecuteException(e.getMessage(), e, sqlInfo.getSql());
+                            } catch (Exception e) {
+                                return SqlExecuteResult.builder()
+                                        .result(e.getMessage())
+                                        .sqlInfo(sqlInfo)
+                                        .success(false)
+                                        .build();
                             }
                         })
                         .collect(Collectors.toList());
                 //通过回调返回执行结果
                 execution.callback.accept(requests);
             } catch (Exception e) {
-                rollback();
                 execution.onError.accept(e);
+                return;
             }
         }
         running = false;
@@ -192,9 +211,8 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
         List<SqlExecuteResult> results = new ArrayList<>();
 
         //异常信息
-        Exception[] exceptions = new Exception[1];
         Execution execution = new Execution();
-        execution.datasourceId=DataSourceHolder.switcher().currentDataSourceId();
+        execution.datasourceId = DataSourceHolder.switcher().currentDataSourceId();
 
         execution.request = request;
         execution.callback = sqlExecuteResults -> {
@@ -203,7 +221,6 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
             countDownLatch.countDown();
         };
         execution.onError = (e) -> {
-            exceptions[0] = e;
             countDownLatch.countDown();
         };
         logger.debug("submit sql execute job {}", transactionId);
@@ -214,11 +231,6 @@ public class DefaultLocalTransactionExecutor implements TransactionExecutor {
         }
         //等待sql执行完毕
         countDownLatch.await();
-        //判断是否有异常
-        Exception exception;
-        if ((exception = exceptions[0]) != null) {
-            throw exception;
-        }
         return results;
     }
 
