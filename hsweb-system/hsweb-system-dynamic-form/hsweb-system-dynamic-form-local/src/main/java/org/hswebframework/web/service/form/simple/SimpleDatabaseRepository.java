@@ -2,18 +2,19 @@ package org.hswebframework.web.service.form.simple;
 
 import org.hswebframework.ezorm.rdb.RDBDatabase;
 import org.hswebframework.ezorm.rdb.executor.SqlExecutor;
-import org.hswebframework.ezorm.rdb.meta.parser.H2TableMetaParser;
-import org.hswebframework.ezorm.rdb.meta.parser.MysqlTableMetaParser;
-import org.hswebframework.ezorm.rdb.meta.parser.OracleTableMetaParser;
-import org.hswebframework.ezorm.rdb.meta.parser.SqlServer2012TableMetaParser;
+import org.hswebframework.ezorm.rdb.meta.parser.*;
 import org.hswebframework.ezorm.rdb.render.dialect.*;
 import org.hswebframework.ezorm.rdb.simple.SimpleDatabase;
 import org.hswebframework.web.datasource.DataSourceHolder;
 import org.hswebframework.web.datasource.DatabaseType;
 import org.hswebframework.web.datasource.DynamicDataSource;
 import org.hswebframework.web.service.form.DatabaseRepository;
+import org.hswebframework.web.service.form.DynamicFormService;
+import org.hswebframework.web.service.form.FormDeployService;
 import org.hswebframework.web.service.form.events.DatabaseInitEvent;
+import org.hswebframework.web.service.form.simple.cluster.ClusterDatabase;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +30,9 @@ public class SimpleDatabaseRepository implements DatabaseRepository {
 
     private volatile RDBDatabase defaultDatabase = null;
     private          SqlExecutor sqlExecutor     = null;
+
+    @Value("${hsweb.dynamic-form.cluster:false}")
+    private boolean cluster = false;
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
@@ -67,6 +71,13 @@ public class SimpleDatabaseRepository implements DatabaseRepository {
             return metaData;
         });
         databaseMetaSuppliers.put(DatabaseType.sqlserver, databaseMetaSuppliers.get(DatabaseType.jtds_sqlserver));
+
+        databaseMetaSuppliers.put(DatabaseType.postgresql, () -> {
+            PGRDBDatabaseMetaData metaData = new PGRDBDatabaseMetaData();
+            metaData.setParser(new PGSqlTableMetaParser(sqlExecutor));
+            return metaData;
+        });
+
     }
 
     @Override
@@ -99,7 +110,10 @@ public class SimpleDatabaseRepository implements DatabaseRepository {
         Supplier<AbstractRDBDatabaseMetaData> supplier = databaseMetaSuppliers.get(databaseType);
         Objects.requireNonNull(supplier, "database type" + databaseType + " is not support");
         AbstractRDBDatabaseMetaData metaData = supplier.get();
-        SimpleDatabase database = new SimpleDatabase(metaData, sqlExecutor);
+
+        SimpleDatabase database = cluster ?
+                new ClusterDatabase(metaData, sqlExecutor) :
+                new SimpleDatabase(metaData, sqlExecutor);
         database.setAutoParse(true);
         eventPublisher.publishEvent(new DatabaseInitEvent(database));
         return database;

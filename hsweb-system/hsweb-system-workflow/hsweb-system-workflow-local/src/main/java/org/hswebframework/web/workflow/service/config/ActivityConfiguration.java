@@ -1,8 +1,11 @@
 package org.hswebframework.web.workflow.service.config;
 
+import org.activiti.engine.task.Task;
 import org.hswebframework.web.authorization.User;
+import org.hswebframework.web.workflow.listener.TaskEventListener;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author zhouhao
@@ -26,13 +29,14 @@ public interface ActivityConfiguration {
      * @see User
      * @see org.hswebframework.web.authorization.Authentication
      */
-    boolean canClaim(String userId);
+    boolean canClaim(Task task, String userId);
 
     /**
      * 获取此任务的所有候选人信息
      *
      * @return 此任务的所有候选人信息 {@link CandidateInfo}
      */
-    List<CandidateInfo> getCandidateInfo();
+    List<CandidateInfo> getCandidateInfo(Task task);
 
+    TaskEventListener getTaskListener(String eventType);
 }

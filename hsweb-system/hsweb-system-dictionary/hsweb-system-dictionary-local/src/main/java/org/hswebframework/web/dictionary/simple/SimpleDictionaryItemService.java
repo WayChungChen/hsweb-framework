@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016 http://www.hswebframework.org
+ *  Copyright 2019 http://www.hswebframework.org
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -67,7 +67,7 @@ public class SimpleDictionaryItemService extends AbstractTreeSortService<Diction
     }
 
     @Override
-    public int deleteByPk(String id) {
+    public DictionaryItemEntity deleteByPk(String id) {
         DictionaryItemEntity entity = selectByPk(id);
         if (null != entity) {
             clearDictCache(entity.getDictId());
@@ -78,7 +78,7 @@ public class SimpleDictionaryItemService extends AbstractTreeSortService<Diction
     @Override
     public List<DictionaryItemEntity> selectByDictId(String dictId) {
         if (StringUtils.isNullOrEmpty(dictId)) {
-            return Collections.emptyList();
+            return new java.util.ArrayList<>();
         }
         return createQuery()
                 .where(DictionaryItemEntity.dictId, dictId)

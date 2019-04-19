@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 http://www.hswebframework.org
+ * Copyright 2019 http://www.hswebframework.org
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ public abstract class AbstractTreeSortService<E extends TreeSortSupportEntity<PK
         assertNotNull(childId);
         E old = selectByPk(childId);
         if (null == old) {
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
         return createQuery()
                 .where()
@@ -60,7 +60,7 @@ public abstract class AbstractTreeSortService<E extends TreeSortSupportEntity<PK
         assertNotNull(parentId);
         E old = selectByPk(parentId);
         if (null == old) {
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
         return createQuery()
                 .where()
@@ -119,7 +119,7 @@ public abstract class AbstractTreeSortService<E extends TreeSortSupportEntity<PK
 
     @Override
     public PK insert(E entity) {
-        if (entity.getId() == null) {
+        if (StringUtils.isEmpty(entity.getId())) {
             entity.setId(getIDGenerator().generate());
         }
         applyPath(entity);
@@ -156,8 +156,8 @@ public abstract class AbstractTreeSortService<E extends TreeSortSupportEntity<PK
     protected PK saveOrUpdateForSingle(E entity) {
         assertNotNull(entity);
         PK id = entity.getId();
-        if (null == id || this.selectByPk(id) == null) {
-            if (null == id) {
+        if (StringUtils.isEmpty(id) || this.selectByPk(id) == null) {
+            if (StringUtils.isEmpty(id)) {
                 entity.setId(getIDGenerator().generate());
             }
             applyPath(entity);
@@ -168,15 +168,17 @@ public abstract class AbstractTreeSortService<E extends TreeSortSupportEntity<PK
     }
 
     @Override
-    public int deleteByPk(PK id) {
+    public E deleteByPk(PK id) {
         E old = selectByPk(id);
         assertNotNull(old);
         if (StringUtils.isEmpty(old.getPath())) {
-            return getDao().deleteByPk(id);
+            getDao().deleteByPk(id);
+        } else {
+            DefaultDSLDeleteService.createDelete(getDao())
+                    // where path like 'path%'
+                    .where().like$(TreeSupportEntity.path, old.getPath())
+                    .exec();
         }
-        return DefaultDSLDeleteService.createDelete(getDao())
-                // where path like 'path%'
-                .where().like$(TreeSupportEntity.path, old.getPath())
-                .exec();
+        return old;
     }
 }

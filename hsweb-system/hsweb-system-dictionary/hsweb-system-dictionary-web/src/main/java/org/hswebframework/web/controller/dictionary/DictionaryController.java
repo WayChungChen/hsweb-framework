@@ -1,5 +1,5 @@
 /*
- *  Copyright 2016 http://www.hswebframework.org
+ *  Copyright 2019 http://www.hswebframework.org
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -88,7 +88,7 @@ public class DictionaryController implements SimpleGenericEntityController<Dicti
     public ResponseMessage<List<EnumDict<Object>>> getItemDefineById(@PathVariable String id) {
         return ok(Optional.ofNullable(repository.getDefine(id))
                 .map(DictDefine::getItems)
-                .orElse(Collections.emptyList()));
+                .orElse(new java.util.ArrayList<>()));
     }
 
 }
